@@ -1,0 +1,4 @@
+chat_id,type,role,content,story_id,requirements,html_output,design_version,approval_status,tokens_used,metadata,monday_item_id,is_iteration
+test_001,pm,system,Requirements: Create a modern login page with email and password fields,STORY-001,Create a modern login page with email and password fields. Include email validation and password show/hide toggle.,,1,draft,0,"{""acceptance_criteria"": [""Email validation"", ""Password toggle""]}",12345,FALSE
+test_001,ai,assistant,I've created a modern login page with email and password fields.,STORY-001,,<!DOCTYPE html><html><head><title>Login</title></head><body><h1>Login</h1><form><input type="email" placeholder="Email" /><input type="password" placeholder="Password" /><button>Login</button></form></body></html>,1,draft,1250,"{}",12345,FALSE
+test_002,user,user,Make the login button blue and bigger,,,<previous_html>,2,draft,0,"{}",12345,TRUE

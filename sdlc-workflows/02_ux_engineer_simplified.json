@@ -1,0 +1,213 @@
+{
+  "name": "02 - UX Engineer - Interactive Design Studio",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ux-chat",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-ux-chat",
+      "name": "UX Chat Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "ux-chat-webhook",
+      "notes": "📝 UX CHAT INTERFACE\n\nReceives design iteration requests from user.\n\nPOST /webhook/ux-chat\nBody: {\n  \"message\": \"Make the button blue and larger\",\n  \"session_id\": \"optional-uuid\",\n  \"current_html\": \"<div>...</div>\"\n}"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pm-to-ux",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-pm-input",
+      "name": "PM Requirements Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 460],
+      "webhookId": "pm-input-webhook",
+      "notes": "🎯 PRODUCT MANAGER INPUT\n\nReceives new design requirements from PM.\n\nPOST /webhook/pm-to-ux\nBody: {\n  \"story_id\": \"STORY-123\",\n  \"requirements\": \"Create login form...\",\n  \"acceptance_criteria\": [\"Email validation\", ...]\n}"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition"
+      },
+      "id": "merge-inputs",
+      "name": "Merge Inputs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [460, 380],
+      "notes": "🔀 INPUT COMBINER\n\nMerges both webhook inputs into single flow."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "session-id",
+              "name": "sessionId",
+              "value": "={{ $json.session_id || $json.story_id || 'session_' + $now.format('yyyyMMddHHmmss') }}",
+              "type": "string"
+            },
+            {
+              "id": "input-type",
+              "name": "inputType",
+              "value": "={{ $json.message ? 'chat' : 'pm_requirement' }}",
+              "type": "string"
+            },
+            {
+              "id": "user-message",
+              "name": "userMessage",
+              "value": "={{ $json.message || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "requirements",
+              "name": "requirements",
+              "value": "={{ $json.requirements || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "acceptance-criteria",
+              "name": "acceptanceCriteria",
+              "value": "={{ $json.acceptance_criteria || [] }}",
+              "type": "array"
+            },
+            {
+              "id": "current-html",
+              "name": "currentHtml",
+              "value": "={{ $json.current_html || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "story-id",
+              "name": "storyId",
+              "value": "={{ $json.story_id || '' }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "build-context",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 380],
+      "notes": "🏗️ CONTEXT BUILDER\n\nNormalizes input into consistent structure.\n\nExtracts:\n- Session ID for tracking\n- Input type (chat vs PM)\n- User message or requirements\n- Current HTML if iterating\n- Story metadata"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "ai-design-agent",
+      "name": "AI UX Designer",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [900, 380],
+      "notes": "🤖 AI UX ENGINEER\n\nGenerates or updates HTML/CSS designs.\n\nCapabilities:\n- Creates designs from requirements\n- Iterates based on feedback\n- Uses Tailwind CSS\n- Responsive & accessible\n- Modern best practices"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4-turbo-preview",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 4000
+        }
+      },
+      "id": "openai-model",
+      "name": "OpenAI GPT-4",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [900, 580],
+      "notes": "🧠 AI MODEL\n\nModel: GPT-4 Turbo\nTemp: 0.3 (balanced)\nTokens: 4000 (full page)"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.inputType === 'pm_requirement' ? \n'You are an expert UX Engineer. Create a beautiful, modern HTML/CSS design for:\\n\\nRequirements: ' + $json.requirements + '\\n\\nAcceptance Criteria:\\n' + $json.acceptanceCriteria.map(c => '- ' + c).join('\\n') + '\\n\\nCreate complete HTML with:\\n1. Tailwind CSS (CDN available)\\n2. Responsive design\\n3. Accessibility features\\n4. Modern, clean aesthetics\\n\\nReturn ONLY the HTML code inside ```html code block.' :\n'You are an expert UX Engineer. Update this design based on feedback:\\n\\nCurrent HTML:\\n```html\\n' + $json.currentHtml + '\\n```\\n\\nUser Feedback: ' + $json.userMessage + '\\n\\nUpdate the design and return the COMPLETE updated HTML inside ```html code block.' }}"
+      },
+      "id": "prompt-template",
+      "name": "Design Prompt",
+      "type": "@n8n/n8n-nodes-langchain.promptTemplate",
+      "typeVersion": 1,
+      "position": [900, 780],
+      "notes": "📝 DYNAMIC PROMPT\n\nGenerates appropriate prompt based on:\n- New design (PM requirements)\n- Iteration (user feedback + current HTML)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract HTML from AI response\nconst aiResponse = $input.first().json.output;\n\n// Extract HTML code from markdown code blocks\nconst htmlMatch = aiResponse.match(/```html\\n([\\s\\S]*?)```/);\nconst rawHtml = htmlMatch ? htmlMatch[1] : aiResponse;\n\n// Build complete HTML with Tailwind CDN\nconst completeHtml = `\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>UX Preview - ${$('Build Context').item.json.sessionId}</title>\n    <script src=\"https://cdn.tailwindcss.com\"></script>\n</head>\n<body>\n    ${rawHtml}\n    \n    <!-- Version Watermark -->\n    <div style=\"position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 8px 12px; border-radius: 4px; font-size: 11px; font-family: monospace; z-index: 9999;\">\n        Session: ${$('Build Context').item.json.sessionId.slice(0, 12)}... | ${new Date().toLocaleTimeString()}\n    </div>\n</body>\n</html>\n`;\n\nreturn {\n  json: {\n    html: completeHtml,\n    rawHtml: rawHtml,\n    sessionId: $('Build Context').item.json.sessionId,\n    timestamp: new Date().toISOString(),\n    inputType: $('Build Context').item.json.inputType\n  }\n};"
+      },
+      "id": "extract-html",
+      "name": "Extract & Format HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 380],
+      "notes": "🔍 HTML EXTRACTOR\n\nProcess:\n1. Extract HTML from AI markdown\n2. Add Tailwind CDN\n3. Add version watermark\n4. Create complete preview-ready HTML"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-cache"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-preview",
+      "name": "Return HTML Preview",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 380],
+      "notes": "🖥️ LIVE PREVIEW RESPONSE\n\nReturns HTML directly to browser.\n\nUser sees:\n- Live, interactive design\n- Can be viewed in browser tab\n- Can be embedded in iframe\n- Instant visual feedback\n\nContent-Type: text/html"
+    }
+  ],
+  "connections": {
+    "UX Chat Input": {
+      "main": [[{ "node": "Merge Inputs", "type": "main", "index": 0 }]]
+    },
+    "PM Requirements Input": {
+      "main": [[{ "node": "Merge Inputs", "type": "main", "index": 1 }]]
+    },
+    "Merge Inputs": {
+      "main": [[{ "node": "Build Context", "type": "main", "index": 0 }]]
+    },
+    "Build Context": {
+      "main": [[{ "node": "AI UX Designer", "type": "main", "index": 0 }]]
+    },
+    "AI UX Designer": {
+      "main": [[{ "node": "Extract & Format HTML", "type": "main", "index": 0 }]]
+    },
+    "Extract & Format HTML": {
+      "main": [[{ "node": "Return HTML Preview", "type": "main", "index": 0 }]]
+    },
+    "OpenAI GPT-4": {
+      "ai_languageModel": [[{ "node": "AI UX Designer", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Design Prompt": {
+      "ai_agent": [[{ "node": "AI UX Designer", "type": "ai_agent", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-07T00:00:00.000Z",
+  "versionId": "ux-v1.0-simplified"
+}

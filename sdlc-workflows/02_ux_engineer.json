@@ -1,0 +1,104 @@
+{
+  "createdAt": "2025-01-07T00:00:00.000Z",
+  "updatedAt": "2025-01-07T00:00:00.000Z",
+  "id": "UXE_001_InteractiveDesignEngine",
+  "name": "02 - UX Engineer - Interactive Design Studio",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ux-chat",
+        "options": {},
+        "responseMode": "lastNode"
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [120, 300],
+      "id": "ux-chat-webhook",
+      "name": "UX Chat Interface",
+      "notes": "📝 USER CHAT INPUT\n\nReceives iterative design feedback from humans.\n\nExpected Payload:\n{\n  \"message\": \"Make the button bigger\",\n  \"session_id\": \"uuid-here\",\n  \"design_version\": 2,\n  \"current_html\": \"<div>...</div>\"\n}\n\nEndpoint: POST /webhook/ux-chat"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pm-to-ux",
+        "options": {},
+        "responseMode": "lastNode"
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [120, 460],
+      "id": "pm-input-webhook",
+      "name": "PM Requirements Input",
+      "notes": "🎯 PRODUCT MANAGER TRIGGER\n\nReceives new requirements from PM workflow.\n\nExpected Payload:\n{\n  \"story_id\": \"STORY-123\",\n  \"title\": \"User Login Screen\",\n  \"requirements\": \"Create login form with email/password\",\n  \"acceptance_criteria\": [\"Email validation\", \"Password strength indicator\"],\n  \"monday_item_id\": \"12345\"\n}\n\nEndpoint: POST /webhook/pm-to-ux"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [280, 380],
+      "id": "input-merger",
+      "name": "Merge Input Sources",
+      "notes": "🔀 INPUT ROUTING\n\nCombines both chat and PM inputs into unified flow.\nDetermines input source and routes accordingly."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "session-id-assign",
+              "name": "sessionId",
+              "value": "={{ $json.session_id || $json.story_id || 'session_' + $now.format('yyyyMMddHHmmss') }}",
+              "type": "string"
+            },
+            {
+              "id": "input-type-assign",
+              "name": "inputType",
+              "value": "={{ $json.message ? 'chat' : 'pm_requirement' }}",
+              "type": "string"
+            },
+            {
+              "id": "user-message-assign",
+              "name": "userMessage",
+              "value": "={{ $json.message || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "pm-requirements-assign",
+              "name": "pmRequirements",
+              "value": "={{ $json.requirements || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "design-version-assign",
+              "name": "designVersion",
+              "value": "={{ $json.design_version || 1 }}",
+              "type": "number"
+            },
+            {
+              "id": "current-html-assign",
+              "name": "currentHtml",
+              "value": "={{ $json.current_html || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "story-id-assign",
+              "name": "storyId",
+              "value": "={{ $json.story_id || '' }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 380],
+      "id": "context-builder",
+      "name": "Build Context",
+      "notes": "🏗️ CONTEXT PREPARATION\n\nExtracts and normalizes all input data:\n- Session ID for conversation tracking\n- Input type (chat vs PM requirement)\n- Current design version\n- Existing HTML if iterating\n- Story/requirements if new project"
+    },

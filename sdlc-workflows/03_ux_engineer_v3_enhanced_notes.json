@@ -1,0 +1,502 @@
+{
+  "name": "03 - UX Engineer v3 - Enhanced Notes",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ux-chat",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-ux-chat",
+      "name": "\ud83d\udd37 UX Chat Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "ux-chat-webhook",
+      "notes": "═══════════════════════════════════════\n🔵 WEBHOOK INPUT: UX CHAT INTERFACE\n═══════════════════════════════════════\n\nPURPOSE:\nReceives iterative design feedback from humans via chat interface\n\nTRIGGER: POST /webhook/ux-chat\n\nEXPECTED PAYLOAD:\n{\n  \"message\": \"Make the button blue and bigger\",\n  \"chat_id\": \"STORY-001\" (optional - reuses existing conversation),\n  \"current_html\": \"<div>...</div>\" (optional)\n}\n\nFLOW:\nUser sends feedback → This webhook receives → Merges with PM input → Continues to context builder\n\nWHEN TO USE:\n- Iterating on existing design\n- Making changes: \"add logo\", \"change color\", \"make bigger\"\n- Refining after initial creation\n\nOUTPUT:\nPasses message to next node for processing"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pm-to-ux",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-pm-input",
+      "name": "\ud83d\udd36 PM Requirements Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 460],
+      "webhookId": "pm-input-webhook",
+      "notes": "═══════════════════════════════════════\n🟠 WEBHOOK INPUT: PRODUCT MANAGER\n═══════════════════════════════════════\n\nPURPOSE:\nReceives new design requirements from Product Manager workflow\n\nTRIGGER: POST /webhook/pm-to-ux\n\nEXPECTED PAYLOAD:\n{\n  \"story_id\": \"STORY-123\",\n  \"requirements\": \"Create a modern login page...\",\n  \"acceptance_criteria\": [\"Email validation\", \"Password toggle\"],\n  \"monday_item_id\": \"12345\" (optional)\n}\n\nFLOW:\nPM defines requirements → This webhook receives → Merges with chat input → Continues to context builder\n\nWHEN TO USE:\n- Starting a new design from scratch\n- PM provides initial requirements\n- Monday.com automation triggers this\n\nOUTPUT:\nPasses requirements to next node for processing"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition"
+      },
+      "id": "merge-inputs",
+      "name": "\ud83d\udd00 Merge Inputs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [460, 380],
+      "notes": "═══════════════════════════════════════\n🟣 DATA COMBINER\n═══════════════════════════════════════\n\nPURPOSE:\nMerges both webhook inputs (Chat + PM) into single unified stream\n\nWHY NEEDED:\nWorkflow can be triggered from 2 different sources:\n1. Chat interface (human iterating)\n2. PM workflow (new requirements)\n\nThis node ensures both paths converge into one flow\n\nOPERATION:\n- Mode: Combine\n- Method: Merge by position\n- Output: Single data stream with all input data\n\nFLOW:\nChat Webhook ──┐\n               ├──> Merged Output → Context Builder\nPM Webhook ────┘\n\nOUTPUT:\nCombined data object with all fields from both sources"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "chat-id",
+              "name": "chatId",
+              "value": "={{ $json.chat_id || $json.session_id || $json.story_id || 'chat_' + $now.format('yyyyMMddHHmmss') }}",
+              "type": "string"
+            },
+            {
+              "id": "input-type",
+              "name": "inputType",
+              "value": "={{ $json.message ? 'chat' : 'pm_requirement' }}",
+              "type": "string"
+            },
+            {
+              "id": "user-message",
+              "name": "userMessage",
+              "value": "={{ $json.message || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "requirements",
+              "name": "requirements",
+              "value": "={{ $json.requirements || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "acceptance-criteria",
+              "name": "acceptanceCriteria",
+              "value": "={{ $json.acceptance_criteria || [] }}",
+              "type": "array"
+            },
+            {
+              "id": "current-html",
+              "name": "currentHtml",
+              "value": "={{ $json.current_html || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "story-id",
+              "name": "storyId",
+              "value": "={{ $json.story_id || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "monday-item-id",
+              "name": "mondayItemId",
+              "value": "={{ $json.monday_item_id || '' }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "build-context",
+      "name": "\ud83c\udfd7\ufe0f Build Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 380],
+      "notes": "═══════════════════════════════════════\n🟢 CONTEXT BUILDER & NORMALIZER\n═══════════════════════════════════════\n\nPURPOSE:\nExtracts and normalizes all input data into consistent structure\n\nCRITICAL FUNCTIONS:\n1. Generates chat_id if not provided (groups conversation)\n2. Determines input type (chat vs PM requirement)\n3. Extracts all relevant fields\n4. Structures data for downstream nodes\n\nFIELD MAPPING:\n✓ chatId: Groups related messages (same design)\n✓ inputType: \"chat\" or \"pm_requirement\"\n✓ userMessage: Feedback text (if chat)\n✓ requirements: Full requirements (if PM)\n✓ acceptanceCriteria: List of must-haves\n✓ storyId: Monday.com story reference\n✓ mondayItemId: Monday.com item ID\n\nLOGIC:\n- chat_id priority: explicit > session_id > story_id > auto-generate\n- inputType: Has \"message\" field? = chat, else = pm_requirement\n\nOUTPUT:\nClean, structured object ready for database and AI processing"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "application": "appWdPrlZVItMIbs7",
+        "table": "Conversations",
+        "columns": {
+          "mappings": [
+            {
+              "column": "chat_id",
+              "value": "={{ $json.chatId }}"
+            },
+            {
+              "column": "type",
+              "value": "={{ $json.inputType === 'chat' ? 'user' : 'pm' }}"
+            },
+            {
+              "column": "role",
+              "value": "={{ $json.inputType === 'chat' ? 'user' : 'system' }}"
+            },
+            {
+              "column": "content",
+              "value": "={{ $json.inputType === 'chat' ? $json.userMessage : 'Requirements: ' + $json.requirements }}"
+            },
+            {
+              "column": "story_id",
+              "value": "={{ $json.storyId }}"
+            },
+            {
+              "column": "requirements",
+              "value": "={{ $json.requirements }}"
+            },
+            {
+              "column": "design_version",
+              "value": 1
+            },
+            {
+              "column": "approval_status",
+              "value": "draft"
+            },
+            {
+              "column": "is_iteration",
+              "value": "={{ $json.inputType === 'chat' }}"
+            },
+            {
+              "column": "monday_item_id",
+              "value": "={{ $json.mondayItemId }}"
+            },
+            {
+              "column": "metadata",
+              "value": "={{ JSON.stringify({ acceptance_criteria: $json.acceptanceCriteria, source: $json.inputType === 'chat' ? 'chat_webhook' : 'pm_webhook' }) }}"
+            }
+          ]
+        }
+      },
+      "id": "save-user-message",
+      "name": "\ud83d\udd36 Save User/PM Message",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [900, 380],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "airtable-credentials",
+          "name": "Airtable UX Conversations"
+        }
+      },
+      "notes": "═══════════════════════════════════════\n💾 DATABASE: SAVE USER/PM MESSAGE\n═══════════════════════════════════════\n\nPURPOSE:\nStores user feedback or PM requirements in Airtable for conversation history\n\nAIRTABLE WRITE:\nTable: Conversations\nOperation: Append (create new record)\n\nFIELDS WRITTEN:\n• chat_id: Groups conversation\n• type: \"user\" (if chat) or \"pm\" (if PM input)\n• role: \"user\" (if chat) or \"system\" (if PM)\n• content: The actual message/requirements\n• story_id: Reference to story\n• requirements: Full PM requirements (if applicable)\n• design_version: 1 (initial)\n• approval_status: \"draft\"\n• is_iteration: true (if chat), false (if PM)\n• metadata: JSON with acceptance_criteria\n• monday_item_id: Reference to Monday.com\n\nWHY IMPORTANT:\nCreates audit trail of what user/PM requested\nEnables AI to see full conversation history\nTracks iterations and changes over time\n\nOUTPUT:\nAirtable record ID and confirmation"
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "application": "appWdPrlZVItMIbs7",
+        "table": "Conversations",
+        "options": {
+          "filterByFormula": "={chat_id} = '{{ $('Build Context').item.json.chatId }}'",
+          "sort": [
+            {
+              "field": "created_at",
+              "direction": "asc"
+            }
+          ],
+          "maxRecords": 20
+        }
+      },
+      "id": "retrieve-history",
+      "name": "\ud83d\udcdc Retrieve Conversation History",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [900, 560],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "airtable-credentials",
+          "name": "Airtable UX Conversations"
+        }
+      },
+      "notes": "═══════════════════════════════════════\n📜 DATABASE: RETRIEVE CONVERSATION HISTORY\n═══════════════════════════════════════\n\nPURPOSE:\nFetches all previous messages for this chat_id to give AI context\n\nAIRTABLE QUERY:\nTable: Conversations\nFilter: chat_id = current session\nSort: created_at ASC (oldest first)\nLimit: 20 messages (prevents token overflow)\n\nRETURNS:\nAll previous messages including:\n• PM requirements (type=\"pm\")\n• User feedback (type=\"user\")\n• AI responses (type=\"ai\")\n• Generated HTML from previous iterations\n\nWHY CRITICAL:\nWithout this, AI has NO MEMORY!\nAI needs to see:\n- Original requirements\n- What it built before\n- What user asked to change\n- Evolution of the design\n\nEXAMPLE OUTPUT:\n[\n  {chat_id: \"abc\", type: \"pm\", content: \"Create login...\"},\n  {chat_id: \"abc\", type: \"ai\", html_output: \"<form>...\"},\n  {chat_id: \"abc\", type: \"user\", content: \"Make button blue\"},\n  {chat_id: \"abc\", type: \"ai\", html_output: \"<form blue>...\"}\n]\n\nAll messages with same chat_id = complete conversation!"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format conversation history for AI\nconst history = $input.all();\nconst contextData = $('Build Context').item.json;\n\nconst messages = [];\nlet latestVersion = 0;\nlet originalRequirements = '';\n\n// Process all messages\nfor (const item of history) {\n  const fields = item.json.fields;\n  \n  // Track latest version\n  if (fields.design_version > latestVersion) {\n    latestVersion = fields.design_version;\n  }\n  \n  // Capture original requirements\n  if (fields.type === 'pm' && fields.requirements) {\n    originalRequirements = fields.requirements;\n  }\n  \n  // Build message for AI context\n  let content = fields.content;\n  \n  // For AI responses, include snippet of HTML generated\n  if (fields.type === 'ai' && fields.html_output) {\n    content += `\\n\\n[Generated HTML v${fields.design_version}]: ${fields.html_output.substring(0, 300)}...`;\n  }\n  \n  messages.push({\n    role: fields.role,\n    content: content,\n    type: fields.type,\n    version: fields.design_version\n  });\n}\n\n// Build context summary\nconst contextSummary = `\n=== CONVERSATION CONTEXT ===\nChat ID: ${contextData.chatId}\nOriginal Requirements: ${originalRequirements || 'N/A'}\nCurrent Version: ${latestVersion}\nTotal Messages: ${messages.length}\n\n=== CONVERSATION HISTORY ===\n${messages.map((m, i) => `[${i + 1}] ${m.type.toUpperCase()} (v${m.version}): ${m.content}`).join('\\n\\n')}\n\n=== NEW REQUEST ===\n${contextData.inputType === 'chat' ? 'User: ' + contextData.userMessage : 'PM Requirements: ' + contextData.requirements}\n`;\n\nreturn {\n  json: {\n    messages: messages,\n    contextSummary: contextSummary,\n    latestVersion: latestVersion,\n    newVersion: latestVersion + 1,\n    originalRequirements: originalRequirements,\n    chatId: contextData.chatId,\n    inputType: contextData.inputType,\n    userMessage: contextData.userMessage,\n    requirements: contextData.requirements\n  }\n};"
+      },
+      "id": "format-history",
+      "name": "\ud83d\udd04 Format History for AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 470],
+      "notes": "═══════════════════════════════════════\n🔄 DATA TRANSFORMER: FORMAT AI CONTEXT\n═══════════════════════════════════════\n\nPURPOSE:\nConverts Airtable records into format AI can understand\n\nJAVASCRIPT PROCESSING:\n1. Loops through all retrieved messages\n2. Tracks latest version number\n3. Captures original PM requirements\n4. Builds chronological conversation summary\n5. Includes HTML snippets from previous AI responses\n\nOUTPUT STRUCTURE:\n{\n  messages: [\n    {role: \"system\", content: \"Original requirements...\"},\n    {role: \"user\", content: \"Make button blue\"},\n    {role: \"assistant\", content: \"Updated design...\"}\n  ],\n  contextSummary: \"Full formatted context for AI\",\n  latestVersion: 2,\n  newVersion: 3,\n  originalRequirements: \"Create login page...\",\n  chatId: \"abc123\"\n}\n\nCONTEXT SUMMARY INCLUDES:\n=== CONVERSATION CONTEXT ===\nChat ID: abc123\nOriginal Requirements: Create login page...\nCurrent Version: 2\nTotal Messages: 4\n\n=== CONVERSATION HISTORY ===\n[1] PM: Create login page with email/password\n[2] AI: [Generated HTML v1 with green button]\n[3] USER: Make the button blue\n[4] AI: [Updated HTML v2 with blue button]\n\n=== NEW REQUEST ===\nUser: Add company logo at top\n\nWHY IMPORTANT:\nAI sees COMPLETE context of conversation\nUnderstands what was requested, what it built, what changed\nMakes intelligent updates instead of starting over"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "ai-design-agent",
+      "name": "\ud83e\udd16 AI UX Designer",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1340, 470],
+      "notes": "═══════════════════════════════════════\n🤖 AI DESIGNER: GPT-4 WITH FULL CONTEXT\n═══════════════════════════════════════\n\nPURPOSE:\nGenerates or updates HTML/CSS design based on requirements and full conversation history\n\nAI MODEL: GPT-4 Turbo\nTemperature: 0.3 (balanced creativity/consistency)\nMax Tokens: 4000 (enough for full HTML page)\n\nCONTEXT PROVIDED TO AI:\n✓ Original PM requirements\n✓ All previous user feedback\n✓ HTML from previous versions\n✓ Current iteration number\n✓ What changed in each version\n✓ New request/feedback\n\nAI CAPABILITIES:\n• Creates initial designs from requirements\n• Iterates on existing designs\n• Understands \"it\", \"the button\", \"that form\"\n• Maintains design consistency\n• Uses Tailwind CSS\n• Generates responsive, accessible HTML\n• Explains design decisions\n\nPROMPT STRUCTURE:\nIF new design (PM input):\n  \"Create beautiful HTML/CSS for: [requirements]\"\n  \nIF iteration (user feedback):\n  \"You previously built: [HTML v2]\n   User now says: [Make button blue]\n   Update ONLY what user requested, keep everything else\"\n\nOUTPUT:\nAI response with HTML code in markdown code blocks\nExplanation of changes made\nDesign rationale\n\nWHY IMPORTANT:\nThis is where the magic happens!\nAI with context = smart, precise updates\nAI without context = confused, regenerates everything"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4-turbo-preview",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 4000
+        }
+      },
+      "id": "openai-model",
+      "name": "\ud83e\udde0 OpenAI GPT-4",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [1340, 670],
+      "notes": "═══════════════════════════════════════\n🧠 AI MODEL CONFIGURATION\n═══════════════════════════════════════\n\nMODEL: GPT-4 Turbo Preview\nProvider: OpenAI\n\nSETTINGS:\n• Temperature: 0.3\n  (Low = consistent, High = creative)\n  0.3 = Balanced for design work\n  \n• Max Tokens: 4000\n  (Enough for full HTML page + explanation)\n\nWHY GPT-4 TURBO:\n✓ Best at following complex instructions\n✓ Understands context well\n✓ Generates clean, semantic HTML\n✓ Good at maintaining consistency\n✓ Handles Tailwind CSS well\n\nCOST PER REQUEST:\n~$0.06 per design iteration\n(Slightly more than v1 due to history context)\n\nCREDENTIALS:\nRequires OpenAI API key with credits"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'You are an expert UX Engineer with access to the full conversation history.\\n\\n' + $json.contextSummary + '\\n\\nINSTRUCTIONS:\\n' + ($json.inputType === 'chat' ? '1. Review the conversation history above\\n2. Understand what has been built (see previous HTML versions)\\n3. Apply the user\\'s latest feedback: \"' + $json.userMessage + '\"\\n4. Return the COMPLETE updated HTML inside ```html code block\\n5. Only change what the user requested, keep everything else the same' : '1. Create a beautiful, modern HTML/CSS design based on requirements\\n2. Requirements: ' + $json.requirements + '\\n3. Use Tailwind CSS (CDN available)\\n4. Make it responsive and accessible\\n5. Return ONLY the HTML code inside ```html code block') }}"
+      },
+      "id": "prompt-template",
+      "name": "\ud83d\udcdd Design Prompt with History",
+      "type": "@n8n/n8n-nodes-langchain.promptTemplate",
+      "typeVersion": 1,
+      "position": [1340, 870],
+      "notes": "═══════════════════════════════════════\n📝 DYNAMIC PROMPT GENERATOR\n═══════════════════════════════════════\n\nPURPOSE:\nBuilds custom prompt for AI based on input type and conversation history\n\nPROMPT STRUCTURE:\n\nFOR NEW DESIGNS (PM):\n\"You are an expert UX Engineer.\n\n[FULL CONVERSATION CONTEXT SUMMARY]\n\nCreate a beautiful, modern HTML/CSS design for:\nRequirements: [requirements]\nAcceptance Criteria: [list]\n\nUse:\n1. Tailwind CSS (CDN available)\n2. Responsive design\n3. Accessibility features\n4. Modern aesthetics\n\nReturn ONLY the HTML code inside ```html code block\"\n\nFOR ITERATIONS (Chat):\n\"You are an expert UX Engineer with access to full history.\n\n[FULL CONVERSATION CONTEXT SUMMARY]\n[SHOWS: Original requirements, previous versions, what you built]\n\nINSTRUCTIONS:\n1. Review conversation history above\n2. Understand what has been built (see previous HTML)\n3. Apply latest feedback: '[user message]'\n4. Return COMPLETE updated HTML inside ```html code block\n5. Only change what user requested, keep everything else same\"\n\nCONTEXT SUMMARY INCLUDES:\n• Original requirements\n• All previous messages\n• Snippets of HTML from previous versions\n• Version numbers\n• What changed each time\n\nWHY DYNAMIC:\nDifferent prompts for different scenarios ensures AI understands context appropriately"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract HTML from AI response\nconst aiResponse = $input.first().json.output;\nconst contextData = $('Format History for AI').item.json;\n\n// Extract HTML code from markdown\nconst htmlMatch = aiResponse.match(/```html\\n([\\s\\S]*?)```/);\nconst rawHtml = htmlMatch ? htmlMatch[1] : aiResponse;\n\n// Build complete HTML\nconst completeHtml = `\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>UX Preview v${contextData.newVersion} - ${contextData.chatId}</title>\n    <script src=\"https://cdn.tailwindcss.com\"></script>\n</head>\n<body>\n    ${rawHtml}\n    \n    <!-- Version Watermark -->\n    <div style=\"position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 8px 12px; border-radius: 4px; font-size: 11px; font-family: monospace; z-index: 9999;\">\n        v${contextData.newVersion} | Chat: ${contextData.chatId.slice(0, 8)}... | ${new Date().toLocaleTimeString()}\n    </div>\n</body>\n</html>\n`;\n\nreturn {\n  json: {\n    html: completeHtml,\n    rawHtml: rawHtml,\n    chatId: contextData.chatId,\n    version: contextData.newVersion,\n    timestamp: new Date().toISOString(),\n    aiResponse: aiResponse.replace(htmlMatch ? htmlMatch[0] : '', '').trim() // AI's explanation without HTML\n  }\n};"
+      },
+      "id": "extract-html",
+      "name": "\ud83d\udd04 Extract & Format HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 470],
+      "notes": "═══════════════════════════════════════\n🔍 HTML EXTRACTOR & FORMATTER\n═══════════════════════════════════════\n\nPURPOSE:\nExtracts clean HTML from AI response and creates complete preview-ready page\n\nJAVASCRIPT PROCESSING:\n\n1. EXTRACT HTML:\n   - AI returns HTML in markdown: ```html ... ```\n   - Regex extracts just the HTML code\n   - Removes markdown formatting\n\n2. BUILD COMPLETE PAGE:\n   - Adds <!DOCTYPE html>\n   - Adds <head> with Tailwind CDN\n   - Wraps extracted HTML in <body>\n   - Adds version watermark (shows session ID + version + time)\n\n3. OUTPUT STRUCTURE:\n   {\n     html: \"Complete preview-ready HTML\",\n     rawHtml: \"Just the AI-generated HTML\",\n     chatId: \"abc123\",\n     version: 3,\n     timestamp: \"2025-01-07T...\",\n     aiResponse: \"AI's explanation text\"\n   }\n\nWATERMARK INCLUDES:\n• Version number (v1, v2, v3...)\n• Chat ID (first 8 chars)\n• Current timestamp\n• Positioned bottom-right, semi-transparent\n\nWHY IMPORTANT:\nCreates ready-to-view HTML page\nTracks which version user is viewing\nSeparates HTML from AI explanation text"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "application": "appWdPrlZVItMIbs7",
+        "table": "Conversations",
+        "columns": {
+          "mappings": [
+            {
+              "column": "chat_id",
+              "value": "={{ $json.chatId }}"
+            },
+            {
+              "column": "type",
+              "value": "ai"
+            },
+            {
+              "column": "role",
+              "value": "assistant"
+            },
+            {
+              "column": "content",
+              "value": "={{ $json.aiResponse || 'Design updated successfully.' }}"
+            },
+            {
+              "column": "html_output",
+              "value": "={{ $json.html }}"
+            },
+            {
+              "column": "design_version",
+              "value": "={{ $json.version }}"
+            },
+            {
+              "column": "approval_status",
+              "value": "draft"
+            },
+            {
+              "column": "is_iteration",
+              "value": true
+            }
+          ]
+        }
+      },
+      "id": "save-ai-response",
+      "name": "\ud83d\udcbe Save AI Response",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [1780, 470],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "airtable-credentials",
+          "name": "Airtable UX Conversations"
+        }
+      },
+      "notes": "═══════════════════════════════════════\n💾 DATABASE: SAVE AI DESIGN\n═══════════════════════════════════════\n\nPURPOSE:\nStores AI-generated design and response in Airtable\n\nAIRTABLE WRITE:\nTable: Conversations\nOperation: Append (create new record)\n\nFIELDS WRITTEN:\n• chat_id: Groups conversation (same as user message)\n• type: \"ai\"\n• role: \"assistant\"\n• content: AI's explanation text\n• html_output: COMPLETE generated HTML page\n• design_version: Incremented from previous\n• approval_status: \"draft\"\n• is_iteration: true\n• tokens_used: (if available from API)\n\nWHY IMPORTANT:\n✓ Stores complete HTML for each version\n✓ Enables version history and rollback\n✓ Creates audit trail of AI decisions\n✓ Allows future retrieval of any version\n✓ Tracks design evolution\n\nCONVERSATION PATTERN:\nUser message (type=\"user\") \n  → AI response (type=\"ai\")\n  → User feedback (type=\"user\")\n  → AI update (type=\"ai\")\n  \nAll with same chat_id = complete conversation!\n\nOUTPUT:\nAirtable record ID and confirmation"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $('Extract & Format HTML').item.json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-cache"
+              },
+              {
+                "name": "X-Chat-ID",
+                "value": "={{ $('Extract & Format HTML').item.json.chatId }}"
+              },
+              {
+                "name": "X-Design-Version",
+                "value": "={{ $('Extract & Format HTML').item.json.version }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-preview",
+      "name": "\ud83d\udda5\ufe0f Return HTML Preview",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2000, 470],
+      "notes": "═══════════════════════════════════════\n🖥️ HTTP RESPONSE: LIVE HTML PREVIEW\n═══════════════════════════════════════\n\nPURPOSE:\nReturns complete HTML directly to browser for immediate preview\n\nRESPONSE TYPE: text/html\nResponse Mode: Last Node (waits for all processing)\n\nRESPONSE BODY:\nComplete HTML page from \"Extract HTML\" node\nIncludes Tailwind CSS, design, and version watermark\n\nCUSTOM HEADERS:\n• Content-Type: text/html; charset=utf-8\n• Cache-Control: no-cache (always fresh)\n• X-Chat-ID: [session ID] (for tracking)\n• X-Design-Version: [version number] (for tracking)\n\nUSER EXPERIENCE:\n1. User sends POST request\n2. Workflow processes (5-10 seconds)\n3. Browser receives HTML\n4. HTML renders immediately\n5. User sees live, interactive design!\n\nCAN BE VIEWED:\n✓ Direct browser URL\n✓ Embedded in iframe\n✓ In Postman/Insomnia\n✓ Custom chat interface\n✓ Mobile app\n\nWHY THIS APPROACH:\n• Instant visual feedback\n• No file storage needed\n• Real interactivity (buttons, forms work)\n• Easy to embed in chat UI\n• Version watermark for tracking\n\nOUTPUT:\nLive, renderable HTML page displayed in browser\n\n🎉 WORKFLOW COMPLETE!"
+    }
+  ],
+  "connections": {
+    "UX Chat Input": {
+      "main": [
+        [
+          {
+            "node": "Merge Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PM Requirements Input": {
+      "main": [
+        [
+          {
+            "node": "Merge Inputs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Inputs": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Save User/PM Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Retrieve Conversation History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save User/PM Message": {
+      "main": [
+        [
+          {
+            "node": "Format History for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Conversation History": {
+      "main": [
+        [
+          {
+            "node": "Format History for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format History for AI": {
+      "main": [
+        [
+          {
+            "node": "AI UX Designer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI UX Designer": {
+      "main": [
+        [
+          {
+            "node": "Extract & Format HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract & Format HTML": {
+      "main": [
+        [
+          {
+            "node": "Save AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save AI Response": {
+      "main": [
+        [
+          {
+            "node": "Return HTML Preview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI GPT-4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI UX Designer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Design Prompt with History": {
+      "ai_agent": [
+        [
+          {
+            "node": "AI UX Designer",
+            "type": "ai_agent",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-07T00:00:00.000Z",
+  "versionId": "ux-v3.0-enhanced-notes-2025"
+}
